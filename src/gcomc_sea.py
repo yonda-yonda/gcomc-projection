@@ -1,10 +1,9 @@
 from scipy import interpolate
 import os
-import io
 import h5py
+import math
 import numpy as np
 from scipy.interpolate import griddata
-from tifffile import imsave as tifsave
 from osgeo import gdal
 from osgeo import osr
 
@@ -28,6 +27,24 @@ def _interp2d_biliner(data, interval):
     return ret
 
 
+def _distance_with_hubeny(point1, point2, is_crossing_meridian=False):
+    # ヒュべニの公式
+    diff_lon = point1[0] - point2[0]
+    diff_lon_rad = math.radians(360 - abs(diff_lon) if is_crossing_meridian else diff_lon)
+    diff_lat_rad = math.radians(point1[1] - point2[1])
+    mean_lat = math.radians(point1[1] + point2[1])/2
+
+    a = 6378137  # [m]
+    inv_f = 298.257223563
+    e2 = (2 - 1 / inv_f) / inv_f
+    w2 = 1 - e2 * pow(math.sin(mean_lat),2)
+
+    radius_median = a * (1 - e2) / pow(w2, 1.5)  # 子午線曲率半径
+    radius_prime_vertical = a  / pow(w2, 0.5)  # 卯酉線曲率半径
+
+    return math.sqrt(pow(diff_lat_rad * radius_median,2) +
+                     pow(diff_lon_rad * radius_prime_vertical * math.cos(mean_lat),2))
+
 class sst:
     def __init__(self, hdf5, qa_masks=None):
         product = 'SST'
@@ -50,15 +67,10 @@ class sst:
 
         self.filename = os.path.splitext(os.path.basename(hdf5))[0]
         self.nodata_value = np.NaN
-        if (self.grid_interval_num == 250):
-            # 40,073,834[m] /360 * 10/4800 = 230[m]
-            self.ddeg = [10 / 4800, 10 / 4800]
 
-        elif(self.grid_interval_num == 1000):
-            # 40,073,834[m] /360 * 4* 10/4800 = 930[m]
-            self.ddeg = [4*10 / 4800, 4*10 / 4800]
-        else:
+        if (self.grid_interval_num != 250 and self.grid_interval_num != 1000):
             raise Exception
+
         self.qa_masks = qa_masks if (type(qa_masks) is list) else [
             {'bit': 0, 'mask': 1},
             {'bit': 1, 'mask': 1},
@@ -123,9 +135,27 @@ class sst:
         lon = _interp2d_biliner(longitudes, self.longitude_resampling)[
             trim_x[0]: trim_x[1], trim_y[0]: trim_y[1]]
 
+        lat_lim = [lat.min(), lat.max()]
+        lon_lim = [lon.min(), lon.max()]
+
+        base_length_x = min([
+            _distance_with_hubeny(
+            [lon_lim[0], lat_lim[0]], [lon_lim[1], lat_lim[0]]),
+            _distance_with_hubeny(
+            [lon_lim[0], lat_lim[1]], [lon_lim[1], lat_lim[1]])])
+
+        base_length_y = _distance_with_hubeny(
+            [lon_lim[0], lat_lim[0]], [lon_lim[0], lat_lim[1]])
+
+        grid_size_lon = math.ceil(base_length_x / self.grid_interval_num)
+        grid_size_lat = math.ceil(base_length_y / self.grid_interval_num)
+
+        diff_lat = (lat_lim[0] - lat_lim[1]) / grid_size_lat
+        diff_lon = (lon_lim[1]-lon_lim[0])/grid_size_lon
+
         # 投影後緯度経度グリッドの作成
-        [lat_grid, lon_grid] = np.mgrid[lat.max():lat.min():-1*self.ddeg[0],
-                                        lon.min(): lon.max(): self.ddeg[1]]
+        [lat_grid, lon_grid] = np.mgrid[lat_lim[1]:lat_lim[0]:diff_lat,
+                                        lon_lim[0]: lon_lim[1]:diff_lon]
 
         # 一部のデータを抽出,グリッドに整形
         points = np.stack([lat.flatten(), lon.flatten()], 1)
@@ -184,7 +214,7 @@ class sst:
             output.GetRasterBand(1).WriteArray(data['grid_array'])
             output.GetRasterBand(1).SetNoDataValue(error_value)
             output.SetGeoTransform(
-                [data['lon_grid'].min(), self.ddeg[0], 0, data['lat_grid'].max(), 0, -self.ddeg[1]])
+                [data['lon_grid'].min(), diff_lon, 0, data['lat_grid'].max(), 0, diff_lat])
             output.SetProjection(srs.ExportToWkt())
             output.FlushCache()
         return
