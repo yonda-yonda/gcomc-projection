@@ -52,10 +52,11 @@ class sst:
         self.nodata_value = np.NaN
         if (self.grid_interval_num == 250):
             # 40,073,834[m] /360 * 10/4800 = 230[m]
-            self.ddeg = 10 / 4800
+            self.ddeg = [10 / 4800, 10 / 4800]
+
         elif(self.grid_interval_num == 1000):
             # 40,073,834[m] /360 * 4* 10/4800 = 930[m]
-            self.ddeg = 4 * 10 / 4800
+            self.ddeg = [4*10 / 4800, 4*10 / 4800]
         else:
             raise Exception
         self.qa_masks = qa_masks if (type(qa_masks) is list) else [
@@ -123,11 +124,8 @@ class sst:
             trim_x[0]: trim_x[1], trim_y[0]: trim_y[1]]
 
         # 投影後緯度経度グリッドの作成
-        lat_lim = [lat.min(), lat.max()]
-        lon_lim = [lon.min(), lon.max()]
-
-        [lat_grid, lon_grid] = np.mgrid[lat_lim[1]:lat_lim[0]
-               : - self.ddeg, lon_lim[0]: lon_lim[1]: self.ddeg]
+        [lat_grid, lon_grid] = np.mgrid[lat.max():lat.min():-1*self.ddeg[0],
+                                        lon.min(): lon.max(): self.ddeg[1]]
 
         # 一部のデータを抽出,グリッドに整形
         points = np.stack([lat.flatten(), lon.flatten()], 1)
@@ -168,7 +166,6 @@ class sst:
                     'grid_array': grid_array_right,
                     'lon_grid': lon_grid_right,
                     'lat_grid': lat_grid_right,
-                    'lat_lim': [lat.min(), lat.max()]
                 })
         else:
             output_data.append({
@@ -187,7 +184,7 @@ class sst:
             output.GetRasterBand(1).WriteArray(data['grid_array'])
             output.GetRasterBand(1).SetNoDataValue(error_value)
             output.SetGeoTransform(
-                [data['lon_grid'].min(), self.ddeg, 0, data['lat_grid'].max(), 0, -self.ddeg])
+                [data['lon_grid'].min(), self.ddeg[0], 0, data['lat_grid'].max(), 0, -self.ddeg[1]])
             output.SetProjection(srs.ExportToWkt())
             output.FlushCache()
         return
