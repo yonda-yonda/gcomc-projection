@@ -45,9 +45,29 @@ def _distance_with_hubeny(point1, point2, is_crossing_meridian=False):
     return math.sqrt(pow(diff_lat_rad * radius_median,2) +
                      pow(diff_lon_rad * radius_prime_vertical * math.cos(mean_lat),2))
 
-class sst:
-    def __init__(self, hdf5, qa_masks=None):
-        product = 'SST'
+defalut_qa_masks = {
+    'SST': [
+            {'bit': 0, 'mask': 1},
+            {'bit': 1, 'mask': 1},
+            {'bit': 2, 'mask': 1},
+            {'bit': 3, 'mask': 1},
+            {'bit': 4, 'mask': 1},
+            {'bit': 5, 'mask': 1},
+            {'bit': 11, 'mask': 1},
+            {'bit': 12, 'mask': 1},
+            {'bit': 15, 'mask': 0}
+        ],
+    'CHLA': [
+        {'bit': 0, 'mask': 1},
+        {'bit': 1, 'mask': 1},
+        {'bit': 2, 'mask': 1},
+        {'bit': 3, 'mask': 1},
+        {'bit': 4, 'mask': 1}
+    ]
+}
+
+class Reader:
+    def __init__(self, hdf5, product = 'SST', qa_masks=None):
         # HDF読込,情報取得
         with h5py.File(hdf5, 'r') as f:
             self.data = f['Image_data'][product][:]
@@ -71,18 +91,8 @@ class sst:
         if (self.grid_interval_num != 250 and self.grid_interval_num != 1000):
             raise Exception
 
-        self.qa_masks = qa_masks if (type(qa_masks) is list) else [
-            {'bit': 0, 'mask': 1},
-            {'bit': 1, 'mask': 1},
-            {'bit': 2, 'mask': 1},
-            {'bit': 3, 'mask': 1},
-            {'bit': 4, 'mask': 1},
-            {'bit': 5, 'mask': 1},
-            {'bit': 11, 'mask': 1},
-            {'bit': 12, 'mask': 1},
-            {'bit': 15, 'mask': 0}
-        ]
-
+        self.qa_masks = qa_masks if (type(qa_masks) is list) else defalut_qa_masks[product]
+        
         # 物理量変換
         self.data = self.slope * self.data + self.offset
 
@@ -140,9 +150,9 @@ class sst:
 
         base_length_x = min([
             _distance_with_hubeny(
-            [lon_lim[0], lat_lim[0]], [lon_lim[1], lat_lim[0]]),
+            [lon_lim[0], lat_lim[0]], [lon_lim[1], lat_lim[0]], is_crossing_meridian),
             _distance_with_hubeny(
-            [lon_lim[0], lat_lim[1]], [lon_lim[1], lat_lim[1]])])
+            [lon_lim[0], lat_lim[1]], [lon_lim[1], lat_lim[1]], is_crossing_meridian)])
 
         base_length_y = _distance_with_hubeny(
             [lon_lim[0], lat_lim[0]], [lon_lim[0], lat_lim[1]])

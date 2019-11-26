@@ -4,7 +4,7 @@ GCOM-Cの観測データをEPSG:4326上に投影する。
 ## Product
 ### 海洋(gcomc_sea.py)
 * SST
-* クロロフィルa(予定)
+* クロロフィルa
 
 ## thanks
 内挿処理の一部は[SGLI_Python_Open_Tool](https://github.com/K0gata/SGLI_Python_Open_Tool)を参考にさせていただきました。
