@@ -89,7 +89,7 @@ class Reader:
         self.nodata_value = np.NaN
 
         if (self.grid_interval_num != 250 and self.grid_interval_num != 1000):
-            raise Exception
+            raise Exception('unknown resolution.')
 
         self.qa_masks = qa_masks if (type(qa_masks) is list) else defalut_qa_masks[product]
         
@@ -125,8 +125,12 @@ class Reader:
     def save_tiff(self, trim_x=None, trim_y=None, error_value=-9999.0, normalize_func=None, dtype=gdal.GDT_Float32):
         if trim_x is None:
             trim_x = [0, self.lines]
+        if trim_x[0] < 0 or trim_x[1] > self.lines:
+            raise Exception('trim_x is out of range.')
         if trim_y is None:
             trim_y = [0, self.pixels]
+        if trim_y[0] < 0 or trim_y[1] > self.pixels:
+            raise Exception('trim_y is out of range.')
 
         # 日付変更線処理
         # 範囲が180度を越えるシーンは無い前提
@@ -141,7 +145,7 @@ class Reader:
             longitudes = np.copy(self.longitudes)
             longitudes[longitudes < 0] += 360
         else:
-            longitudes = self.longitudes
+            longitudes = np.copy(self.longitudes)
 
         lon = _interp2d_biliner(longitudes, self.longitude_resampling)[
             trim_x[0]: trim_x[1], trim_y[0]: trim_y[1]]
