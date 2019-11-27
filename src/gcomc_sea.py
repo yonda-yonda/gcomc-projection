@@ -129,7 +129,8 @@ class Reader:
             trim_y = [0, self.pixels]
 
         # 日付変更線処理
-        is_crossing_meridian = (
+        # 範囲が180度を越えるシーンは無い前提
+        is_crossing_meridian = self.longitudes.max() * self.longitudes.min() < 0 and (
             self.longitudes.max() - self.longitudes.min()) > 180
 
         # 緯度経度リサンプリングデータ補間,一部の領域を抽出
