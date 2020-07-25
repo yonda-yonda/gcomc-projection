@@ -12,12 +12,12 @@ defalut_qa_masks = {
     'LST': [
         {'bit': 0, 'mask': 1},
         {'bit': 1, 'mask': 1},
-        {'bit': 5, 'mask': 1},
-        {'bit': 9, 'mask': 1},
-        {'bit': 10, 'mask': 1},
+        {'bit': 4, 'mask': 1},
+        {'bit': 11, 'mask': 1},
         {'bit': 12, 'mask': 1},
         {'bit': 13, 'mask': 1},
-        {'bit': 11, 'mask': 1}
+        {'bit': 14, 'mask': 1},
+        {'bit': 15, 'mask': 1}
     ]
 }
 
@@ -39,8 +39,7 @@ class Reader:
 
         self.filename = os.path.splitext(os.path.basename(hdf5))[0]
 
-
-        if (len(self.filename.split('_')) < 3 or not re.match('^T\d{4}',self.filename.split('_')[2])):
+        if (len(self.filename.split('_')) < 3 or not re.match('^T\d{4}', self.filename.split('_')[2])):
             raise Exception('This file name don\'t include tile num.')
 
         tile_position = self.filename.split('_')[2]
@@ -80,7 +79,6 @@ class Reader:
             self.data[mask_0 | mask_1] = self.nodata_value
         return
 
-
     def calc_lonlat(self, trim_lines, trim_pixels):
         trim_line_length = trim_lines[1] - trim_lines[0]
         trim_pixel_length = trim_pixels[1] - trim_pixels[0]
@@ -93,7 +91,7 @@ class Reader:
         # htile_num = 36
         v_pixel = int(lin_tile * vtile_num)
         d = 180 / v_pixel
-        NL = v_pixel # 180 / d
+        NL = v_pixel  # 180 / d
         NP0 = 2 * NL
 
         for i in range(trim_line_length):
@@ -104,13 +102,12 @@ class Reader:
                 lat = 90 - (lin_total + 0.5) * d
                 NPi = int(round(NP0 * math.cos(math.radians(lat)), 0))
                 lon = 360 / NPi * (col_total - NP0 / 2 + 0.5)
-                lons[i,j] = lon
-                lats[i,j] = lat
+                lons[i, j] = lon
+                lats[i, j] = lat
 
-        # nint int(round(f, 0))     
-        
+        # nint int(round(f, 0))
+
         return (lons, lats)
-
 
     def save_tiff(self, trim_x=None, trim_y=None, error_value=-9999.0, normalize_func=None, dtype=gdal.GDT_Float32):
         if trim_x is None:
@@ -123,7 +120,7 @@ class Reader:
             raise Exception('trim_y is out of range.')
 
         # 緯度経度
-        lonlat = self.calc_lonlat(trim_x,trim_y)
+        lonlat = self.calc_lonlat(trim_x, trim_y)
         longitudes = lonlat[0]
         latitudes = lonlat[1]
 
@@ -145,6 +142,7 @@ class Reader:
         points = np.stack([latitudes.flatten(), longitudes.flatten()], 1)
         values = self.data[trim_x[0]: trim_x[1],
                            trim_y[0]: trim_y[1]].flatten()
+ 
         grid_array = griddata(
             points, values, (lat_grid, lon_grid), method='linear')
 
@@ -190,10 +188,12 @@ class Reader:
             })
         srs = osr.SpatialReference()
         srs.ImportFromEPSG(4326)
+
         for data in output_data:
             driver = gdal.GetDriverByName('GTiff')
             output = driver.Create(data['dst_path'], data['grid_array'].shape[1],
                                    data['grid_array'].shape[0], 1, dtype)
+
             output.GetRasterBand(1).WriteArray(data['grid_array'])
             output.GetRasterBand(1).SetNoDataValue(error_value)
             output.SetGeoTransform(
