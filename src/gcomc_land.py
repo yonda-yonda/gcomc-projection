@@ -1,9 +1,13 @@
 from scipy import interpolate
 import os
+import io
 import re
 import h5py
 import math
 import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+from PIL import Image
 from scipy.interpolate import griddata
 from osgeo import gdal
 from osgeo import osr
@@ -109,7 +113,7 @@ class Reader:
 
         return (lons, lats)
 
-    def save_tiff(self, trim_x=None, trim_y=None, error_value=-9999.0, normalize_func=None, dtype=gdal.GDT_Float32):
+    def _calc_data(self, trim_x, trim_y, error_value, normalize_func):
         if trim_x is None:
             trim_x = [0, self.lines]
         if trim_x[0] < 0 or trim_x[1] > self.lines:
@@ -186,6 +190,10 @@ class Reader:
                 'lon_grid': lon_grid,
                 'lat_grid': lat_grid
             })
+        return output_data
+
+    def save_tiff(self, trim_x=None, trim_y=None, error_value=-9999.0, normalize_func=None, dtype=gdal.GDT_Float32):
+        output_data = self._calc_data(trim_x, trim_y, error_value, normalize_func)
         srs = osr.SpatialReference()
         srs.ImportFromEPSG(4326)
 
@@ -196,6 +204,34 @@ class Reader:
 
             output.GetRasterBand(1).WriteArray(data['grid_array'])
             output.GetRasterBand(1).SetNoDataValue(error_value)
+            output.SetGeoTransform(
+                [data['lon_grid'].min(), self.grid_interval_num, 0, data['lat_grid'].max(), 0, -1*self.grid_interval_num])
+            output.SetProjection(srs.ExportToWkt())
+            output.FlushCache()
+        return
+
+    def save_color_tiff(self, trim_x=None, trim_y=None, normalize_func=None, cmap='jet'):
+        error_value=np.nan
+        output_data = self._calc_data(trim_x, trim_y, error_value, normalize_func)
+        srs = osr.SpatialReference()
+        srs.ImportFromEPSG(4326)
+
+        for data in output_data:
+            arr = data['grid_array']
+
+            temp = io.BytesIO()
+            plt.imsave(temp, arr, vmin=0, vmax=255, cmap=cmap)
+            temp_img = np.array(Image.open(temp))
+            for i in range(0,4):
+                temp_img[:,:,i][np.isnan(arr)] = 0
+
+            driver = gdal.GetDriverByName('GTiff')
+            output = driver.Create(data['dst_path'], data['grid_array'].shape[1],
+                                   data['grid_array'].shape[0], 4)
+
+            for i in range(0,4):
+                output.GetRasterBand(i + 1).WriteArray(temp_img[:,:, i])
+
             output.SetGeoTransform(
                 [data['lon_grid'].min(), self.grid_interval_num, 0, data['lat_grid'].max(), 0, -1*self.grid_interval_num])
             output.SetProjection(srs.ExportToWkt())
